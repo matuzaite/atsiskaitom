@@ -1,0 +1,325 @@
+/* Expense modal — fully self-contained (no global stylesheet, literal colors).
+   CategoryInput and MemberSelect are defined inline in ExpenseForm.jsx. */
+
+/* ---- Shared primitives used inside the modal ---- */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  justify-content: space-around;
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.row.between {
+  justify-content: space-between;
+  align-items: center;
+}
+
+.grow {
+  flex: 1;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+input {
+  background: #273449;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  color: #e2e8f0;
+  padding: 12px;
+  font-size: 1rem;
+  width: 100%;
+}
+
+input:focus {
+  outline: 2px solid #1EF176;
+  border-color: transparent;
+}
+
+button {
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.muted {
+  color: #94a3b8;
+}
+
+.small {
+  font-size: 0.8rem;
+}
+
+.error {
+  color: #f87171;
+  margin: 4px 0;
+}
+
+.link {
+  background: none;
+  border: none;
+  color: #1EF176;
+  padding: 0;
+  font-size: 0.85rem;
+}
+
+.icon {
+  background: none;
+  border: none;
+  font-size: 1rem;
+  padding: 6px;
+  border-radius: 8px;
+}
+
+.icon:hover {
+  background: #273449;
+}
+
+.primary {
+  background: #016D5A;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 14px;
+  font-weight: 600;
+}
+
+.primary:hover {
+  background: #1EF176;
+  color: #06281c;
+}
+
+.primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ---- Modal shell ---- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  /* Sit a bit above center so the category dropdown has room to open below. */
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  z-index: 100;
+  padding: 6vh 16px 16px;
+}
+
+.modal {
+  background: #1e293b;
+  width: 100%;
+  max-width: 560px;
+  border-radius: 20px;
+  padding: 20px 20px 20px 20px;
+  height: 50vh;
+}
+
+.modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-head h2 {
+  margin: 0;
+}
+
+/* ---- Amount field ---- */
+.amount-input {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.amount-input input {
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
+.currency-suffix {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #94a3b8;
+  padding-right: 4px;
+}
+
+/* ---- Split type tabs ---- */
+.split-tabs {
+  display: flex;
+  gap: 6px;
+  background: #273449;
+  padding: 4px;
+  border-radius: 10px;
+}
+
+.tab {
+  flex: 1;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  padding: 8px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.tab.active {
+  background: #1EF176;
+  color: #06281c;
+  font-weight: 600;
+}
+
+/* ---- Participant chips (equal split) ---- */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  background: #273449;
+  border: 1px solid #334155;
+  color: #94a3b8;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 0.9rem;
+}
+
+.chip.on {
+  background: #1EF176;
+  color: #06281c;
+  border-color: #1EF176;
+}
+
+.mini-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* ---- Custom amount rows ---- */
+.custom-splits {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.custom-row {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  color: #e2e8f0;
+}
+
+.custom-row>span {
+  flex: 1;
+}
+
+.suffixed {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 140px;
+}
+
+.suffix {
+  color: #94a3b8;
+  font-size: 0.85rem;
+}
+
+.split-summary {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  margin: 0;
+}
+
+/* ---- Combobox (category input + member select) ---- */
+.combo {
+  position: relative;
+}
+
+.combo-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  margin-top: 6px;
+  z-index: 20;
+  list-style: none;
+  padding: 6px;
+  background: #273449;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.combo-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: none;
+  border: none;
+  color: #e2e8f0;
+  padding: 10px 10px;
+  border-radius: 8px;
+  text-align: left;
+  text-transform: capitalize;
+  font-size: 0.95rem;
+}
+
+.combo-item:hover,
+.combo-item.active {
+  background: #1EF176;
+  color: #06281c;
+}
+
+.combo-emoji {
+  font-size: 1.15rem;
+  width: 1.4rem;
+  text-align: center;
+}
+
+.combo-select-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #273449;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  color: #e2e8f0;
+  padding: 12px;
+  font-size: 1rem;
+  width: 100%;
+  cursor: pointer;
+  text-align: left;
+}
+
+.combo-select-btn:focus {
+  outline: 2px solid #1EF176;
+  border-color: transparent;
+}
+
+.combo-arrow {
+  width: 16px;
+  height: 16px;
+  stroke: #e2e8f0;
+}
+
+/* ---- Participants wrapper ---- */
+.participants {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
