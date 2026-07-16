@@ -23,8 +23,8 @@ function CategoryInput({ value, onChange }) {
     const onDocClick = (e) => {
       if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
     };
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
+    document.addEventListener("pointerdown", onDocClick);
+    return () => document.removeEventListener("pointerdown", onDocClick);
   }, []);
 
   const q = value.trim().toLowerCase();
@@ -45,7 +45,7 @@ function CategoryInput({ value, onChange }) {
               <button
                 type="button"
                 className={`combo-item ${c.key === q ? "active" : ""}`}
-                onClick={() => { onChange(c.key); setOpen(false); }}
+                onPointerDown={(e) => { e.preventDefault(); onChange(c.key); setOpen(false); }}
               >
                 <span className="combo-emoji">{c.icon}</span>
                 <span>{c.key}</span>
@@ -66,8 +66,8 @@ function MemberSelect({ value, onChange, members }) {
     const onDocClick = (e) => {
       if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
     };
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
+    document.addEventListener("pointerdown", onDocClick);
+    return () => document.removeEventListener("pointerdown", onDocClick);
   }, []);
 
   const selected = members.find((m) => m.id === value);
@@ -89,7 +89,7 @@ function MemberSelect({ value, onChange, members }) {
               <button
                 type="button"
                 className={`combo-item ${m.id === value ? "active" : ""}`}
-                onClick={() => { onChange(m.id); setOpen(false); }}
+                onPointerDown={(e) => { e.preventDefault(); onChange(m.id); setOpen(false); }}
               >
                 <span>{m.name}</span>
               </button>
