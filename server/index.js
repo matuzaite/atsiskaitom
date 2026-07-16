@@ -77,21 +77,21 @@ function withDerived(group) {
 
 // ---- Group routes ---------------------------------------------------------
 
-app.get("/api/groups", h((req, res) => res.json(db.listGroups())));
+app.get("/api/groups", h(async (req, res) => res.json(await db.listGroups())));
 
 app.post(
   "/api/groups",
-  h((req, res) => {
+  h(async (req, res) => {
     const name = (req.body.name || "").trim();
     if (!name) fail("group name is required");
-    res.status(201).json(withDerived(db.createGroup(name, req.body.members || [])));
+    res.status(201).json(withDerived(await db.createGroup(name, req.body.members || [])));
   }),
 );
 
 app.get(
   "/api/groups/:id",
-  h((req, res) => {
-    const group = db.getGroup(req.params.id);
+  h(async (req, res) => {
+    const group = await db.getGroup(req.params.id);
     if (!group) fail("group not found", 404);
     res.json(withDerived(group));
   }),
@@ -99,8 +99,8 @@ app.get(
 
 app.patch(
   "/api/groups/:id",
-  h((req, res) => {
-    const group = db.renameGroup(req.params.id, req.body.name || "");
+  h(async (req, res) => {
+    const group = await db.renameGroup(req.params.id, req.body.name || "");
     if (!group) fail("group not found", 404);
     res.json(withDerived(group));
   }),
@@ -108,8 +108,8 @@ app.patch(
 
 app.delete(
   "/api/groups/:id",
-  h((req, res) => {
-    db.deleteGroup(req.params.id);
+  h(async (req, res) => {
+    await db.deleteGroup(req.params.id);
     res.status(204).end();
   }),
 );
@@ -118,21 +118,21 @@ app.delete(
 
 app.post(
   "/api/groups/:id/members",
-  h((req, res) => {
-    const group = db.getGroup(req.params.id);
+  h(async (req, res) => {
+    const group = await db.getGroup(req.params.id);
     if (!group) fail("group not found", 404);
     const name = (req.body.name || "").trim();
     if (!name) fail("member name is required");
-    db.addMember(group.id, name);
-    res.status(201).json(withDerived(db.getGroup(group.id)));
+    await db.addMember(group.id, name);
+    res.status(201).json(withDerived(await db.getGroup(group.id)));
   }),
 );
 
 app.delete(
   "/api/groups/:id/members/:memberId",
-  h((req, res) => {
-    db.removeMember(req.params.id, req.params.memberId);
-    res.json(withDerived(db.getGroup(req.params.id)));
+  h(async (req, res) => {
+    await db.removeMember(req.params.id, req.params.memberId);
+    res.json(withDerived(await db.getGroup(req.params.id)));
   }),
 );
 
@@ -140,32 +140,32 @@ app.delete(
 
 app.post(
   "/api/groups/:id/expenses",
-  h((req, res) => {
-    const group = db.getGroup(req.params.id);
+  h(async (req, res) => {
+    const group = await db.getGroup(req.params.id);
     if (!group) fail("group not found", 404);
-    db.addExpense(group.id, buildExpense(group, req.body));
-    res.status(201).json(withDerived(db.getGroup(group.id)));
+    await db.addExpense(group.id, buildExpense(group, req.body));
+    res.status(201).json(withDerived(await db.getGroup(group.id)));
   }),
 );
 
 app.put(
   "/api/expenses/:id",
-  h((req, res) => {
-    const existing = db.getExpense(req.params.id);
+  h(async (req, res) => {
+    const existing = await db.getExpense(req.params.id);
     if (!existing) fail("expense not found", 404);
-    const group = db.getGroup(existing.groupId);
-    db.updateExpense(existing.id, buildExpense(group, req.body));
-    res.json(withDerived(db.getGroup(group.id)));
+    const group = await db.getGroup(existing.groupId);
+    await db.updateExpense(existing.id, buildExpense(group, req.body));
+    res.json(withDerived(await db.getGroup(group.id)));
   }),
 );
 
 app.delete(
   "/api/expenses/:id",
-  h((req, res) => {
-    const existing = db.getExpense(req.params.id);
+  h(async (req, res) => {
+    const existing = await db.getExpense(req.params.id);
     if (!existing) fail("expense not found", 404);
-    db.deleteExpense(existing.id);
-    res.json(withDerived(db.getGroup(existing.groupId)));
+    await db.deleteExpense(existing.id);
+    res.json(withDerived(await db.getGroup(existing.groupId)));
   }),
 );
 
@@ -173,8 +173,8 @@ app.delete(
 
 app.post(
   "/api/groups/:id/settlements",
-  h((req, res) => {
-    const group = db.getGroup(req.params.id);
+  h(async (req, res) => {
+    const group = await db.getGroup(req.params.id);
     if (!group) fail("group not found", 404);
     const memberIds = new Set(group.members.map((m) => m.id));
     const { fromMemberId, toMemberId } = req.body;
@@ -182,24 +182,24 @@ app.post(
     if (!memberIds.has(fromMemberId) || !memberIds.has(toMemberId)) fail("from/to must be group members");
     if (fromMemberId === toMemberId) fail("from and to must differ");
     if (!Number.isInteger(amount) || amount <= 0) fail("amount must be positive cents");
-    db.addSettlement(group.id, {
+    await db.addSettlement(group.id, {
       fromMemberId,
       toMemberId,
       amount,
       currency: (req.body.currency || "EUR").toUpperCase().slice(0, 3),
       date: req.body.date || new Date().toISOString().slice(0, 10),
     });
-    res.status(201).json(withDerived(db.getGroup(group.id)));
+    res.status(201).json(withDerived(await db.getGroup(group.id)));
   }),
 );
 
 app.delete(
   "/api/settlements/:id",
-  h((req, res) => {
-    const existing = db.getSettlement(req.params.id);
+  h(async (req, res) => {
+    const existing = await db.getSettlement(req.params.id);
     if (!existing) fail("settlement not found", 404);
-    db.deleteSettlement(existing.id);
-    res.json(withDerived(db.getGroup(existing.groupId)));
+    await db.deleteSettlement(existing.id);
+    res.json(withDerived(await db.getGroup(existing.groupId)));
   }),
 );
 
@@ -214,7 +214,9 @@ app.get(/^(?!\/api).*/, (req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3001;
-if (process.env.NODE_ENV !== "test") {
+// On Vercel the app runs as a serverless function (imported by api/index.js), so
+// it must NOT bind a port. Only listen for local dev / a self-hosted Node process.
+if (process.env.NODE_ENV !== "test" && !process.env.VERCEL) {
   app.listen(PORT, () => console.log(`Expense splitter API on http://localhost:${PORT}`));
 }
 

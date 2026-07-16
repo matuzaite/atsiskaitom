@@ -1,38 +1,58 @@
-// Tiny JSON-file persistence layer.
+// Persistence layer.
 //
-// For a 3-15 person friend-group tool this is plenty: the whole dataset is a
-// few kilobytes and fits comfortably in memory. Writes are atomic (write to a
-// temp file, then rename) so a crash mid-write can't corrupt the store.
+// The whole dataset for a friend-group tool is a few kilobytes, so we store it
+// as a single JSON blob and load/save the whole thing per operation. Two
+// backends, chosen at runtime:
+//   - Upstash Redis (serverless-friendly, HTTP) when its env vars are present
+//     — this is what runs on Vercel, where the filesystem is ephemeral.
+//   - A local JSON file otherwise — zero-setup local development.
 //
-// Swapping this for SQLite/Postgres later means reimplementing this one module;
-// nothing else in the app knows how data is stored.
+// Every exported function is async: it reads the current state, mutates it, and
+// writes it back. Nothing else in the app knows how data is stored.
 
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { Redis } from "@upstash/redis";
 import { splitEqual } from "./settle.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const EMPTY = { groups: [], members: [], expenses: [], settlements: [] };
+
+// ---- Storage backend ------------------------------------------------------
+
+const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+const STORE_KEY = process.env.STORE_KEY || "atsiskaitom:store";
+
+const redis = REDIS_URL && REDIS_TOKEN ? new Redis({ url: REDIS_URL, token: REDIS_TOKEN }) : null;
+
 const DATA_FILE = process.env.DATA_FILE
   ? path.resolve(process.env.DATA_FILE)
   : path.join(__dirname, "..", "data", "store.json");
 
-const EMPTY = { groups: [], members: [], expenses: [], settlements: [] };
-
-function load() {
+/** Read the whole store. */
+async function read() {
+  if (redis) {
+    const data = await redis.get(STORE_KEY); // @upstash/redis parses JSON for us
+    return data ? { ...EMPTY, ...data } : structuredClone(EMPTY);
+  }
   try {
-    const raw = fs.readFileSync(DATA_FILE, "utf8");
-    return { ...EMPTY, ...JSON.parse(raw) };
+    return { ...EMPTY, ...JSON.parse(fs.readFileSync(DATA_FILE, "utf8")) };
   } catch (err) {
     if (err.code === "ENOENT") return structuredClone(EMPTY);
     throw err;
   }
 }
 
-let state = load();
-
-function persist() {
+/** Write the whole store. */
+async function write(state) {
+  if (redis) {
+    await redis.set(STORE_KEY, state);
+    return;
+  }
   fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
   const tmp = `${DATA_FILE}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(state, null, 2));
@@ -41,27 +61,9 @@ function persist() {
 
 export const id = () => randomUUID();
 
-// ---- Groups ---------------------------------------------------------------
+// ---- Pure projections (operate on an already-loaded state) ----------------
 
-export function createGroup(name, memberNames = []) {
-  const group = { id: id(), name: name.trim(), createdAt: new Date().toISOString() };
-  state.groups.push(group);
-  for (const n of memberNames) if (n && n.trim()) addMember(group.id, n);
-  persist();
-  return getGroup(group.id);
-}
-
-export function listGroups() {
-  return state.groups
-    .map((g) => ({
-      ...g,
-      members: state.members.filter((m) => m.groupId === g.id),
-      expenseCount: state.expenses.filter((e) => e.groupId === g.id).length,
-    }))
-    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-}
-
-export function getGroup(groupId) {
+function projectGroup(state, groupId) {
   const group = state.groups.find((g) => g.id === groupId);
   if (!group) return null;
   return {
@@ -76,32 +78,65 @@ export function getGroup(groupId) {
   };
 }
 
-export function renameGroup(groupId, name) {
+// ---- Groups ---------------------------------------------------------------
+
+export async function createGroup(name, memberNames = []) {
+  const state = await read();
+  const group = { id: id(), name: name.trim(), createdAt: new Date().toISOString() };
+  state.groups.push(group);
+  for (const n of memberNames) {
+    if (n && n.trim()) state.members.push({ id: id(), groupId: group.id, name: n.trim() });
+  }
+  await write(state);
+  return projectGroup(state, group.id);
+}
+
+export async function listGroups() {
+  const state = await read();
+  return state.groups
+    .map((g) => ({
+      ...g,
+      members: state.members.filter((m) => m.groupId === g.id),
+      expenseCount: state.expenses.filter((e) => e.groupId === g.id).length,
+    }))
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+}
+
+export async function getGroup(groupId) {
+  const state = await read();
+  return projectGroup(state, groupId);
+}
+
+export async function renameGroup(groupId, name) {
+  const state = await read();
   const g = state.groups.find((x) => x.id === groupId);
   if (!g) return null;
   g.name = name.trim();
-  persist();
-  return getGroup(groupId);
+  await write(state);
+  return projectGroup(state, groupId);
 }
 
-export function deleteGroup(groupId) {
+export async function deleteGroup(groupId) {
+  const state = await read();
   state.groups = state.groups.filter((g) => g.id !== groupId);
   state.members = state.members.filter((m) => m.groupId !== groupId);
   state.expenses = state.expenses.filter((e) => e.groupId !== groupId);
   state.settlements = state.settlements.filter((s) => s.groupId !== groupId);
-  persist();
+  await write(state);
 }
 
 // ---- Members --------------------------------------------------------------
 
-export function addMember(groupId, name) {
+export async function addMember(groupId, name) {
+  const state = await read();
   const member = { id: id(), groupId, name: name.trim() };
   state.members.push(member);
-  persist();
+  await write(state);
   return member;
 }
 
-export function removeMember(groupId, memberId) {
+export async function removeMember(groupId, memberId) {
+  const state = await read();
   // Instead of blocking, cleanly re-home this member's expenses onto the people
   // who were part of them, so history and balances stay consistent:
   //  - drop the member from each expense's split and spread their owed share
@@ -142,40 +177,45 @@ export function removeMember(groupId, memberId) {
   );
 
   state.members = state.members.filter((m) => m.id !== memberId);
-  persist();
+  await write(state);
 }
 
 // ---- Expenses -------------------------------------------------------------
 
-export function addExpense(groupId, data) {
+export async function addExpense(groupId, data) {
+  const state = await read();
   const expense = { id: id(), groupId, createdAt: new Date().toISOString(), ...data };
   state.expenses.push(expense);
-  persist();
+  await write(state);
   return expense;
 }
 
-export function updateExpense(expenseId, data) {
+export async function updateExpense(expenseId, data) {
+  const state = await read();
   const e = state.expenses.find((x) => x.id === expenseId);
   if (!e) return null;
   Object.assign(e, data, { id: e.id, groupId: e.groupId, createdAt: e.createdAt });
-  persist();
+  await write(state);
   return e;
 }
 
-export function deleteExpense(expenseId) {
+export async function deleteExpense(expenseId) {
+  const state = await read();
   const before = state.expenses.length;
   state.expenses = state.expenses.filter((e) => e.id !== expenseId);
-  persist();
+  await write(state);
   return state.expenses.length < before;
 }
 
-export function getExpense(expenseId) {
+export async function getExpense(expenseId) {
+  const state = await read();
   return state.expenses.find((e) => e.id === expenseId) || null;
 }
 
 // ---- Settlements ----------------------------------------------------------
 
-export function addSettlement(groupId, data) {
+export async function addSettlement(groupId, data) {
+  const state = await read();
   const settlement = {
     id: id(),
     groupId,
@@ -184,22 +224,24 @@ export function addSettlement(groupId, data) {
     ...data,
   };
   state.settlements.push(settlement);
-  persist();
+  await write(state);
   return settlement;
 }
 
-export function getSettlement(settlementId) {
+export async function getSettlement(settlementId) {
+  const state = await read();
   return state.settlements.find((s) => s.id === settlementId) || null;
 }
 
-export function deleteSettlement(settlementId) {
+export async function deleteSettlement(settlementId) {
+  const state = await read();
   const before = state.settlements.length;
   state.settlements = state.settlements.filter((s) => s.id !== settlementId);
-  persist();
+  await write(state);
   return state.settlements.length < before;
 }
 
 // Test/utility hook.
-export function _reset() {
-  state = structuredClone(EMPTY);
+export async function _reset() {
+  await write(structuredClone(EMPTY));
 }
