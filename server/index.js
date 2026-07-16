@@ -1,7 +1,7 @@
 import express from "express";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import * as db from "./db.js";
+import db from "./db.js";
 import { settleUp, splitEqual, splitByPercent } from "./settle.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
